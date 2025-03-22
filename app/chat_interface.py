@@ -32,5 +32,7 @@ def display_chat_interface():
                         st.code(response['model'])
                         st.subheader("Session ID")
                         st.code(response['session_id'])
+                        st.subheader("Context Used")
+                        st.code(response['context'])
             else:
                 st.error("Failed to get a response from the API. Please try again.")

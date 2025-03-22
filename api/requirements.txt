@@ -9,3 +9,7 @@ pypdf
 python-multipart
 sentence-transformers
 streamlit
+transformers
+torch
+numpy
+nltk

@@ -2,6 +2,7 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, Un
 from langchain_text_splitters import RecursiveCharacterTextSplitter #Делит большой текст на Чанки (части)
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings #Преобразует текст в векторное представление (эмбединги)
 #Эмбеддинги позволяют сравнивать тексты по смыслу, т.е. находить похожие по значению отрывки.
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma #Само векторное хранилище
 from typing import List
 from langchain_core.documents import Document #Используется, чтобы передавать текстовые части вместе с идентификатором файла.
@@ -10,10 +11,12 @@ from langchain_core.documents import Document #Используется, что�
 Другими словами, его задача — взять загруженный документ, извлечь из него текст, разбить этот текст на части (чанки)
 и сохранить эти части в векторном хранилище, чтобы потом можно было быстро находить релевантные фрагменты по смыслу."""
 
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200, length_function=len)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200, length_function=len)
 #chunk_overlap - Это насколько чанки текста будут залазить друг на друга (пересекаться)
 
-embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+# embedding_function = SentenceTransformerEmbeddings(model_name="all-mpnet-base-v2")
+embedding_function = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
+
 
 vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embedding_function)
 

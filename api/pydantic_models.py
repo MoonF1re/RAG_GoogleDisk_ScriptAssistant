@@ -18,6 +18,7 @@ class QueryResponse(BaseModel): #Данные которые обязаны ве
     answer: str
     session_id: str
     model: ModelName
+    context: str
 
 
 class DocumentInfo(BaseModel):  #Данные которые нужны чтобы вывести файл

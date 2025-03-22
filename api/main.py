@@ -20,14 +20,17 @@ def chat(query_input: QueryInput):
     logging.info(f"Session ID: {session_id}, User Query: {query_input.question}, Model: {query_input.model.value}")
 
     chat_history = get_chat_history(session_id)
-    rag_chain = get_rag_chain(query_input.model.value)
+    rag_chain, hybrid_retriever_obj = get_rag_chain(query_input.model.value)
     answer = rag_chain.invoke({ #Отправляем словарь в нашу цепочку, на выходе получаем ответ.
         "input": query_input.question,
         "chat_history": chat_history
     })['answer']
+
+    context_used = hybrid_retriever_obj.last_context #Получаем контекст, который мы отправили
+
     insert_application_logs(session_id, query_input.question, answer, query_input.model.value)
     logging.info(f"Session ID: {session_id}, AI Response: {answer}")
-    return QueryResponse(answer=answer, session_id=session_id, model=query_input.model)
+    return QueryResponse(answer=answer, session_id=session_id, model=query_input.model, context=context_used)
 
 
 @app.post("/upload-doc")

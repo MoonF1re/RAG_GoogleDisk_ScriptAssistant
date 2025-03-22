@@ -1,12 +1,13 @@
 from langchain_community.chat_models import ChatOllama #Библиотека да Ламы
-
+from hybrid_context_extractor import hybrid_extract_context
 from langchain_core.prompts import ChatPromptTemplate #Позволяет создавать шаблон для промта
 from langchain_core.prompts import MessagesPlaceholder #Добавлет место куда можно подставить историю чата
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.documents import Document
 from chroma_utils import vectorstore
 
-retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 #vectorstore преобразуется в retriever – компонент, который по запросу будет возвращать релевантные фрагменты документов.
 
 
@@ -32,15 +33,68 @@ contextualize_q_prompt = ChatPromptTemplate.from_messages([
 
 #Формат Финального промта для LLM
 qa_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful AI assistant. Use the following context to answer the user's question."),
+    ("system", "You are a helpful AI script assistant. Use the following context to answer the user's question."),
     ("system", "Context: {context}"),
     MessagesPlaceholder(variable_name="chat_history"),
     ("human", "{input}")
 ])
 
-def get_rag_chain(model="llama3.2"):  #Создаём цепочку по которой работает наша система.
+class HybridRetriever:
+    def __init__(self, base_retriever):
+        self.base_retriever = base_retriever
+
+    def __call__(self, query, chat_history=""):
+        # Если query пришёл как словарь, извлекаем текст из поля "input"
+        if isinstance(query, dict):
+            query = query.get("input", "")
+        # Получаем первоначальные результаты от базового retriever
+        initial_chunks = self.base_retriever.invoke({"input": query, "chat_history": chat_history})
+        # Преобразуем каждый элемент в строку: если это объект Document (или dict) с полем page_content, берем его
+        texts = []
+        for chunk in initial_chunks:
+            if isinstance(chunk, dict):
+                texts.append(chunk.get("page_content", str(chunk)))
+            elif hasattr(chunk, "page_content"):
+                texts.append(chunk.page_content)
+            else:
+                texts.append(str(chunk))
+
+        # Применяем гибридное извлечение для уточнения контекста
+        refined_chunks = hybrid_extract_context(query, texts)
+
+        # Сохраняем объединённый контекст
+        self.last_context = "\n\n".join(refined_chunks)
+
+        # Оборачиваем каждую строку в объект Document с пустыми метаданными
+        refined_docs = [Document(page_content=txt, metadata={}) for txt in refined_chunks]
+        return refined_docs
+
+    def similarity_search(self, query: str, **kwargs):
+        # Если есть chat_history в kwargs, извлекаем его, иначе – пустая строка
+        chat_history = kwargs.get("chat_history", "")
+        return self.__call__(query, chat_history)
+
+    def with_config(self, **kwargs):
+        # Если нужна дополнительная конфигурация, здесь можно её добавить
+        return self
+
+
+
+
+def get_rag_chain(model="llama3.2"):
     llm = ChatOllama(model=model)
-    history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt) #Преобразуем вопрос и извлекает контекст из документов с учетом истории.
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)  #Создаёт цепочку которая берет найденный контекст, объединяет их с историей чата и исходным вопросом и даёт ответ
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain) #Создаём всю цельную цепочку
-    return rag_chain
+
+    #Базовый ретривер
+    base_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
+    #Гибридный
+    hybrid_retriever_obj = HybridRetriever(base_retriever)
+
+    # Создаем цепочку для генерации ответа на основе финального промта
+    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
+
+    # Собираем всю цепочку
+    rag_chain = create_retrieval_chain(hybrid_retriever_obj, question_answer_chain)
+
+    #СТАРАЯ ЦЕПОЧКА
+    #rag_chain = create_retrieval_chain(base_retriever, question_answer_chain)
+    return rag_chain, hybrid_retriever_obj
