@@ -1,0 +1,11 @@
+credentials.json
+token.json
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+*.log
+chroma_db/
