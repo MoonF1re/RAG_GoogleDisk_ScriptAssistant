@@ -1,9 +1,10 @@
-import requests #Библиотека для отправки HTTP-запросов. Через него мы связываемся с нашим api
-import streamlit as st #Через него мы создаём веб приложение. Конкретно тут для отображения ошибок
+import requests
+import streamlit as st
 
-"""Тут описаны как мы отправляем запросы на наш Api и как мы получаем ответы"""
+"""Функции для взаимодействия с API FastAPI."""
+# Изменение: Обновлено описание модуля
 def get_api_response(question, session_id, model):
-    headers = { #HTTP-загаловок
+    headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json'
     }
@@ -15,7 +16,8 @@ def get_api_response(question, session_id, model):
         data["session_id"] = session_id
 
     try:
-        response = requests.post("http://localhost:8000/chat", headers=headers, json=data) #Отправляем POST запрос.
+        # Изменение: URL изменён с /chat на /query
+        response = requests.post("http://localhost:8000/query", headers=headers, json=data)
         if response.status_code == 200:
             return response.json()
         else:

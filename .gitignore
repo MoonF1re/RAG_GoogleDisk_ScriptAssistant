@@ -1,0 +1,13 @@
+# Исключаем чувствительные файлы Google Drive API
+credentials.json
+token.json
+
+# Исключаем временные файлы и кэш
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+*.log
+chroma_db/

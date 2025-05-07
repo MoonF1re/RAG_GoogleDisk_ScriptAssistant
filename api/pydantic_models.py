@@ -26,6 +26,9 @@ class DocumentInfo(BaseModel):  #Данные которые нужны чтоб
     filename: str
     upload_timestamp: datetime
 
-
 class DeleteFileRequest(BaseModel): #Данные которые нужны для удаления файла
     file_id: int
+
+# Изменение: Добавлена модель UploadGDriveRequest для загрузки папок с Google Drive
+class UploadGDriveRequest(BaseModel):
+     folder_url: str  # Изменено с file_id на folder_url

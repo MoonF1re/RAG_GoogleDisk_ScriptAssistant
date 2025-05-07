@@ -1,63 +1,68 @@
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredHTMLLoader #Используется для извлечения текста из PDF, DOCX, HTML
-from langchain_text_splitters import RecursiveCharacterTextSplitter #Делит большой текст на Чанки (части)
-from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings #Преобразует текст в векторное представление (эмбединги)
-#Эмбеддинги позволяют сравнивать тексты по смыслу, т.е. находить похожие по значению отрывки.
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma #Само векторное хранилище
-from typing import List
-from langchain_core.documents import Document #Используется, чтобы передавать текстовые части вместе с идентификатором файла.
+import os
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredHTMLLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.documents import Document
 
-""""Chroma Utils отвечает за подготовку и индексацию документов для семантического поиска
-Другими словами, его задача — взять загруженный документ, извлечь из него текст, разбить этот текст на части (чанки)
-и сохранить эти части в векторном хранилище, чтобы потом можно было быстро находить релевантные фрагменты по смыслу."""
+# Изменение: Удалены импорты устаревших модулей (langchain_text_splitters, langchain_huggingface, SentenceTransformerEmbeddings)
+# Изменение: Используется langchain.text_splitter вместо langchain_text_splitters
+# Изменение: Используется langchain_community.embeddings вместо langchain_huggingface
 
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200, length_function=len)
-#chunk_overlap - Это насколько чанки текста будут залазить друг на друга (пересекаться)
+# Инициализация векторного хранилища
+# Изменение: Переименовано embedding_function в embedding_model для ясности
+# Изменение: Добавлено collection_name="rag_collection" для явного указания имени коллекции
+embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+vectorstore = Chroma(collection_name="rag_collection", embedding_function=embedding_model, persist_directory="./chroma_db")
 
-#embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-embedding_function = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
-
-
-vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embedding_function)
-
-
-def load_and_split_document(file_path: str) -> List[Document]:
-    if file_path.endswith('.pdf'):
-        loader = PyPDFLoader(file_path)
-    elif file_path.endswith('.docx'):
-        loader = Docx2txtLoader(file_path)
-    elif file_path.endswith('.html'):
-        loader = UnstructuredHTMLLoader(file_path)
-    else:
-        raise ValueError(f"Unsupported file type: {file_path}")
-
-    documents = loader.load()
-    return text_splitter.split_documents(documents) #Возращает список объектов Document, каждый из которых содержит фрагмент текста
-
-
-def index_document_to_chroma(file_path: str, file_id: int) -> bool:
+# Изменение: Функция load_and_split_document удалена, её логика перенесена в index_document_to_chroma
+# Изменение: index_document_to_chroma теперь принимает input_data (путь или список документов) вместо file_path
+def index_document_to_chroma(input_data, file_id):
     try:
-        splits = load_and_split_document(file_path)
+        # Проверяем, является ли input_data строкой (путь к файлу) или списком документов
+        if isinstance(input_data, str):
+            file_path = input_data
+            file_extension = os.path.splitext(file_path)[1].lower()
 
-        for split in splits:
-            split.metadata['file_id'] = file_id #Для каждого чанка в его метаданные добавляется file_id чтобы связать с целым файлом
+            # Загрузка документа в зависимости от типа файла
+            if file_extension == '.pdf':
+                loader = PyPDFLoader(file_path)
+            elif file_extension == '.docx':
+                loader = Docx2txtLoader(file_path)
+            elif file_extension == '.html':
+                loader = UnstructuredHTMLLoader(file_path)
+            else:
+                return False  # Изменение: Упрощена обработка ошибок (без ValueError)
 
-        vectorstore.add_documents(splits)
+            documents = loader.load()
+        elif isinstance(input_data, list):
+            # Предполагаем, что input_data — это список объектов Document
+            documents = input_data
+        else:
+            raise ValueError("Input must be a file path (str) or a list of Documents")
+
+        # Разбиение документов на чанки
+        # Изменение: chunk_size уменьшен с 1500 до 1000 для более мелких чанков
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(documents)
+
+        # Добавление метаданных с file_id
+        for chunk in chunks:
+            chunk.metadata["file_id"] = file_id
+
+        # Индексация в Chroma
+        vectorstore.add_documents(chunks)
         return True
     except Exception as e:
-        print(f"Error indexing document: {e}")
+        print(f"Error indexing document: {str(e)}")
         return False
 
-
-def delete_doc_from_chroma(file_id: int):
+# Изменение: Упрощена функция delete_doc_from_chroma, удалён промежуточный get и логи
+def delete_doc_from_chroma(file_id):
     try:
-        docs = vectorstore.get(where={"file_id": file_id})
-        print(f"Found {len(docs['ids'])} document chunks for file_id {file_id}")
-
-        vectorstore._collection.delete(where={"file_id": file_id})
-        print(f"Deleted all documents with file_id {file_id}")
-
+        # Удаление документов с указанным file_id
+        vectorstore.delete(where={"file_id": file_id})
         return True
     except Exception as e:
-        print(f"Error deleting document with file_id {file_id} from Chroma: {str(e)}")
+        print(f"Error deleting document from Chroma: {str(e)}")
         return False
