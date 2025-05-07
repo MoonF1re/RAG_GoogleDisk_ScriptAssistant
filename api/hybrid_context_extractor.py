@@ -54,10 +54,12 @@ def get_topic_score(query, chunks, vectorizer, nmf_model):
     query_tfidf = vectorizer.transform([query])
     query_topic = nmf_model.transform(query_tfidf)[0]
     _, _, topic_distributions = compute_topic_distributions(chunks, n_topics=len(nmf_model.components_))
+    # Вычисляем косинусное сходство между темой запроса и каждого чанка
     scores = [compute_cosine_similarity(query_topic, td) for td in topic_distributions]
     return scores
 
 def compute_ner_score(query, text):
+    #Если ключевые сущности присутствуют или совпадают, чанк считается более релевантным.
     doc_query = nlp(query)
     doc_text = nlp(text)
     ents_query = {ent.text.lower() for ent in doc_query.ents}
@@ -65,7 +67,7 @@ def compute_ner_score(query, text):
     return len(ents_query.intersection(ents_text)) / len(ents_query) if ents_query else 0.0
 
 def get_position_weight(index, total_chunks):
-    if index < 0.3 * total_chunks or index > 0.7 * total_chunks.:
+    if index < 0.3 * total_chunks or index > 0.7 * total_chunks:
         return 1.2
     return 1.0
 
@@ -79,6 +81,12 @@ def hybrid_extract_context(query, chunks, top_k=3,
 
     query_embedding = get_transformer_embedding(query)
     tfidf_vectorizer = TfidfVectorizer(stop_words=RUSSIAN_STOP_WORDS, min_df=1)
+    # Шаг 1: Получаем эмбеддинги и оценки всех методов
+    query_embedding = get_transformer_embedding(query)
+    tfidf_vectorizer = TfidfVectorizer(stop_words="english")
+    tfidf_matrix = tfidf_vectorizer.fit_transform(chunks)
+    query_tfidf = tfidf_vectorizer.transform([query])
+    tfidf_scores = (query_tfidf.multiply(tfidf_matrix)).toarray().sum(axis=1)
     try:
         tfidf_matrix = tfidf_vectorizer.fit_transform(chunks)
         query_tfidf = tfidf_vectorizer.transform([query])
@@ -91,7 +99,7 @@ def hybrid_extract_context(query, chunks, top_k=3,
 
     total_chunks = len(chunks)
     scores = []
-
+    # Шаг 2: Объединяем оценки c чанками
     for i, chunk in enumerate(chunks):
         transformer_score = compute_cosine_similarity(query_embedding, get_transformer_embedding(chunk))
         ner_score = compute_ner_score(query, chunk)
@@ -126,7 +134,6 @@ def hybrid_extract_context(query, chunks, top_k=3,
                 break
         if not duplicate:
             unique_chunks.append(chunk)
-
     return unique_chunks
 
 class HybridRetriever:
