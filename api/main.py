@@ -1,36 +1,65 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
-import uuid #отвечает за генерацию уникального айди сессии
+import uuid
 import logging
-#==Импорт из других модулей системы==
-from pydantic_models import QueryInput, QueryResponse, DocumentInfo, DeleteFileRequest #Импорт моделей данных для защиты от дурака.
+from pydantic_models import QueryInput, QueryResponse, DocumentInfo, DeleteFileRequest, LLMSettings
 from langchain_utils import get_rag_chain
 from db_utils import insert_application_logs, get_chat_history, get_all_documents, insert_document_record, delete_document_record
 from chroma_utils import index_document_to_chroma, delete_doc_from_chroma
-#==Библиотеки для работы с файлами===
 import os
 import shutil
 
 logging.basicConfig(filename='app.log', level=logging.INFO)
 
+
 app = FastAPI()
 
 @app.post("/chat", response_model=QueryResponse)
 def chat(query_input: QueryInput):
-    session_id = query_input.session_id or str(uuid.uuid4())
-    logging.info(f"Session ID: {session_id}, User Query: {query_input.question}, Model: {query_input.model.value}")
-
-    chat_history = get_chat_history(session_id)
-    rag_chain, hybrid_retriever_obj = get_rag_chain(query_input.model.value)
-    answer = rag_chain.invoke({ #Отправляем словарь в нашу цепочку, на выходе получаем ответ.
-        "input": query_input.question,
-        "chat_history": chat_history
-    })['answer']
-
-    context_used = hybrid_retriever_obj.last_context #Получаем контекст, который мы отправили
-
-    insert_application_logs(session_id, query_input.question, answer, query_input.model.value)
-    logging.info(f"Session ID: {session_id}, AI Response: {answer}")
-    return QueryResponse(answer=answer, session_id=session_id, model=query_input.model, context=context_used)
+    try:
+        session_id = query_input.session_id or str(uuid.uuid4())
+        logging.info(f"Processing query: {query_input.question}")
+        
+        llm_settings = LLMSettings(
+            temperature=query_input.temperature,
+            max_tokens=query_input.max_tokens,
+            frequency_penalty=query_input.frequency_penalty,
+            presence_penalty=query_input.presence_penalty,
+            system_prompt=query_input.system_prompt
+        )
+        
+        rag_chain, hybrid_retriever_obj = get_rag_chain(
+            query_input.model.value,
+            llm_settings
+        )
+        
+        chat_history = get_chat_history(session_id)
+        result = rag_chain.invoke({
+            "input": query_input.question,
+            "chat_history": chat_history
+        })
+        
+        answer = result.get('answer', 'No answer generated')
+        context = hybrid_retriever_obj.last_context
+        
+        insert_application_logs(
+            session_id,
+            query_input.question,
+            answer,
+            query_input.model.value
+        )
+        
+        return {
+            "answer": answer,
+            "session_id": session_id,
+            "model": query_input.model,
+            "context": context
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e))
 
 
 @app.post("/upload-doc")

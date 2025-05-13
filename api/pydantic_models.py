@@ -5,14 +5,33 @@ from pydantic import BaseModel, Field
 """
 from enum import Enum #Библиотека для перечислений
 from datetime import datetime
-class ModelName(str, Enum): #Все модели которые может выбрать пользователь.
-    GPT4_O = "gpt-4o"
-    GPT4_O_MINI = "gpt-4o-mini"
-    LLAMA3_2 = "llama3.2"
-class QueryInput(BaseModel): #Данные которые пользователь обязан дать
+from pydantic import BaseModel, Field
+from enum import Enum
+from datetime import datetime
+
+class ModelName(str, Enum):
+    qwen3 = "qwen3:1.7b"
+    deepseek = "deepseek-r1:1.5b"
+    gemma3 = "gemma3:1b"
+
+class LLMSettings(BaseModel):
+    temperature: float = 0.7
+    max_tokens: int = 2000
+    frequency_penalty: float = 0.0
+    presence_penalty: float = 0.0
+    system_prompt: str = "You are a helpful AI script assistant..."
+
+class QueryInput(BaseModel):
     question: str
-    session_id: str = Field(default=None) #не обязательный параметр. Пользователь его не передаёт, мы их генерируем в main.
-    model: ModelName = Field(default=ModelName.LLAMA3_2)
+    session_id: str = Field(default=None)
+    model: ModelName = Field(default=ModelName.gemma3)
+    temperature: float = 0.7
+    max_tokens: int = 2000
+    frequency_penalty: float = 0.0
+    presence_penalty: float = 0.0
+    system_prompt: str = "You are a helpful AI script assistant..."
+
+# ... остальные классы ...
 
 class QueryResponse(BaseModel): #Данные которые обязаны вернуть пользователю
     answer: str

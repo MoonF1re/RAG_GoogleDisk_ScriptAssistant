@@ -2,6 +2,7 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, Un
 from langchain_text_splitters import RecursiveCharacterTextSplitter #Делит большой текст на Чанки (части)
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings #Преобразует текст в векторное представление (эмбединги)
 #Эмбеддинги позволяют сравнивать тексты по смыслу, т.е. находить похожие по значению отрывки.
+
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma #Само векторное хранилище
 from typing import List
